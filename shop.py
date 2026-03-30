@@ -64,6 +64,58 @@ def init_db():
                     note TEXT,
                     FOREIGN KEY(customer_id) REFERENCES customers(id))''')
 
+    c.execute('''CREATE TABLE IF NOT EXISTS suppliers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    phone TEXT,
+                    address TEXT,
+                    due REAL DEFAULT 0)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS purchases (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT,
+                    supplier_id INTEGER,
+                    supplier_name TEXT,
+                    total REAL,
+                    paid REAL DEFAULT 0,
+                    due REAL DEFAULT 0,
+                    items TEXT,
+                    FOREIGN KEY(supplier_id) REFERENCES suppliers(id))''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS warranties (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sale_id INTEGER,
+                    sale_date TEXT,
+                    customer_name TEXT,
+                    customer_phone TEXT,
+                    product_name TEXT,
+                    serial_no TEXT,
+                    warranty_months INTEGER DEFAULT 12,
+                    expiry_date TEXT,
+                    note TEXT)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS returns (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT,
+                    type TEXT,
+                    customer_name TEXT,
+                    product_name TEXT,
+                    qty INTEGER,
+                    price REAL,
+                    refund REAL,
+                    reason TEXT,
+                    note TEXT)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    role TEXT DEFAULT 'staff')''')
+
+    # Default admin user
+    c.execute("INSERT OR IGNORE INTO users (username,password,role) VALUES (?,?,?)",
+              ("admin", "admin123", "admin"))
+
     conn.commit()
     conn.close()
 
@@ -112,50 +164,69 @@ def show_invoice(sale_id):
 
 # ====================== MAIN APPLICATION ======================
 class ShopERP:
-    def __init__(self, root):
+    def __init__(self, root, logged_user="admin", logged_role="admin"):
         self.root = root
-        self.root.title("Shop Management ERP - Md. Hasibul")
-        self.root.geometry("1200x750")
+        self.logged_user = logged_user
+        self.logged_role = logged_role
+        self.root.title(f"Shop Management ERP - Md. Hasibul  |  User: {logged_user} ({logged_role})")
+        self.root.geometry("1280x780")
         self.root.configure(bg="#f0f0f0")
 
         init_db()
 
         style = ttk.Style()
         style.theme_use("clam")
-        style.configure("TNotebook.Tab", padding=[12, 6], font=("Arial", 10, "bold"))
+        style.configure("TNotebook.Tab", padding=[10, 5], font=("Arial", 9, "bold"))
 
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        self.dashboard_tab = ttk.Frame(self.notebook)
-        self.product_tab   = ttk.Frame(self.notebook)
-        self.stock_tab     = ttk.Frame(self.notebook)
-        self.customer_tab  = ttk.Frame(self.notebook)
-        self.sales_tab     = ttk.Frame(self.notebook)
-        self.history_tab   = ttk.Frame(self.notebook)
-        self.expense_tab   = ttk.Frame(self.notebook)
-        self.due_tab       = ttk.Frame(self.notebook)
-        self.report_tab    = ttk.Frame(self.notebook)
+        self.dashboard_tab  = ttk.Frame(self.notebook)
+        self.product_tab    = ttk.Frame(self.notebook)
+        self.stock_tab      = ttk.Frame(self.notebook)
+        self.customer_tab   = ttk.Frame(self.notebook)
+        self.sales_tab      = ttk.Frame(self.notebook)
+        self.history_tab    = ttk.Frame(self.notebook)
+        self.expense_tab    = ttk.Frame(self.notebook)
+        self.due_tab        = ttk.Frame(self.notebook)
+        self.report_tab     = ttk.Frame(self.notebook)
+        self.supplier_tab   = ttk.Frame(self.notebook)
+        self.purchase_tab   = ttk.Frame(self.notebook)
+        self.warranty_tab   = ttk.Frame(self.notebook)
+        self.return_tab     = ttk.Frame(self.notebook)
+        self.user_tab       = ttk.Frame(self.notebook)
 
-        self.notebook.add(self.dashboard_tab, text=" Dashboard ")
-        self.notebook.add(self.product_tab,   text=" Products ")
-        self.notebook.add(self.stock_tab,     text=" Stock In/Out ")
-        self.notebook.add(self.customer_tab,  text=" Customers ")
-        self.notebook.add(self.sales_tab,     text=" Sales / Billing ")
-        self.notebook.add(self.history_tab,   text=" Sales History ")
-        self.notebook.add(self.expense_tab,   text=" Expenses ")
-        self.notebook.add(self.due_tab,       text=" Due Payments ")
-        self.notebook.add(self.report_tab,    text=" Monthly Report ")
+        self.notebook.add(self.dashboard_tab,  text=" Dashboard ")
+        self.notebook.add(self.product_tab,    text=" Products ")
+        self.notebook.add(self.stock_tab,      text=" Stock In/Out ")
+        self.notebook.add(self.supplier_tab,   text=" Suppliers ")
+        self.notebook.add(self.purchase_tab,   text=" Purchases ")
+        self.notebook.add(self.customer_tab,   text=" Customers ")
+        self.notebook.add(self.sales_tab,      text=" Sales/Billing ")
+        self.notebook.add(self.history_tab,    text=" Sales History ")
+        self.notebook.add(self.warranty_tab,   text=" Warranty ")
+        self.notebook.add(self.return_tab,     text=" Returns ")
+        self.notebook.add(self.expense_tab,    text=" Expenses ")
+        self.notebook.add(self.due_tab,        text=" Due Payments ")
+        self.notebook.add(self.report_tab,     text=" Reports ")
+        if logged_role == "admin":
+            self.notebook.add(self.user_tab,   text=" Users ")
 
         self.create_dashboard()
         self.create_product_tab()
         self.create_stock_tab()
+        self.create_supplier_tab()
+        self.create_purchase_tab()
         self.create_customer_tab()
         self.create_sales_tab()
         self.create_history_tab()
+        self.create_warranty_tab()
+        self.create_return_tab()
         self.create_expense_tab()
         self.create_due_tab()
         self.create_report_tab()
+        if logged_role == "admin":
+            self.create_user_tab()
 
     # ======================== DASHBOARD ========================
     def create_dashboard(self):
@@ -1428,8 +1499,709 @@ class ShopERP:
         canvas.create_line(pad_left, pad_top + chart_h, W - pad_right, pad_top + chart_h, fill="#333", width=2)
 
 
+    # ======================== SUPPLIER TAB ========================
+    def create_supplier_tab(self):
+        left = tk.Frame(self.supplier_tab, padx=20, pady=20)
+        left.pack(side=tk.LEFT, fill=tk.Y)
+
+        tk.Label(left, text="Supplier Management", font=("Arial", 15, "bold")).pack(pady=10)
+
+        for lbl, attr in [("Name:", "s_name"), ("Phone:", "s_phone"), ("Address:", "s_address")]:
+            tk.Label(left, text=lbl, anchor="w").pack(fill=tk.X)
+            e = tk.Entry(left, width=28)
+            e.pack(pady=3)
+            setattr(self, attr, e)
+
+        bf = tk.Frame(left); bf.pack(pady=12)
+        tk.Button(bf, text="Add",    command=self.add_supplier,    bg="#4CAF50", fg="white", width=10).grid(row=0, column=0, padx=3)
+        tk.Button(bf, text="Update", command=self.update_supplier, bg="#2196F3", fg="white", width=10).grid(row=0, column=1, padx=3)
+        tk.Button(bf, text="Delete", command=self.delete_supplier, bg="#f44336", fg="white", width=10).grid(row=1, column=0, padx=3, pady=4)
+        tk.Button(bf, text="Clear",  command=self.clear_supplier_form, bg="#9E9E9E", fg="white", width=10).grid(row=1, column=1, padx=3, pady=4)
+
+        right = tk.Frame(self.supplier_tab)
+        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+        tk.Label(right, text="Supplier List", font=("Arial", 13, "bold")).pack()
+
+        cols = ("ID", "Name", "Phone", "Address", "Total Due")
+        self.supplier_tree = ttk.Treeview(right, columns=cols, show="headings", height=24)
+        for col, w in zip(cols, (50, 180, 120, 280, 110)):
+            self.supplier_tree.heading(col, text=col)
+            self.supplier_tree.column(col, width=w)
+        self.supplier_tree.tag_configure("due", foreground="red")
+        sb = ttk.Scrollbar(right, orient="vertical", command=self.supplier_tree.yview)
+        self.supplier_tree.configure(yscrollcommand=sb.set)
+        self.supplier_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.supplier_tree.bind("<<TreeviewSelect>>", self.load_supplier_to_form)
+        tk.Button(right, text="Refresh", command=self.load_suppliers, bg="#607D8B", fg="white").pack(pady=5)
+        self.load_suppliers()
+
+    def add_supplier(self):
+        name = self.s_name.get().strip()
+        if not name:
+            messagebox.showerror("Error", "Name required!"); return
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        c.execute("INSERT INTO suppliers (name,phone,address) VALUES(?,?,?)",
+                  (name, self.s_phone.get(), self.s_address.get()))
+        conn.commit(); conn.close()
+        messagebox.showinfo("Success", "Supplier Added!")
+        self.load_suppliers(); self.clear_supplier_form()
+        self._refresh_supplier_combobox()
+
+    def load_suppliers(self):
+        for i in self.supplier_tree.get_children(): self.supplier_tree.delete(i)
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        c.execute("SELECT id,name,phone,address,due FROM suppliers ORDER BY name")
+        for row in c.fetchall():
+            tag = ("due",) if row[4] > 0 else ()
+            self.supplier_tree.insert("", "end", values=row, tags=tag)
+        conn.close()
+
+    def load_supplier_to_form(self, event):
+        sel = self.supplier_tree.selection()
+        if not sel: return
+        v = self.supplier_tree.item(sel[0])['values']
+        for e, val in zip([self.s_name, self.s_phone, self.s_address], v[1:4]):
+            e.delete(0, tk.END); e.insert(0, val if val else "")
+
+    def update_supplier(self):
+        sel = self.supplier_tree.selection()
+        if not sel: messagebox.showwarning("Warning", "Select a supplier!"); return
+        sid = self.supplier_tree.item(sel[0])['values'][0]
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        c.execute("UPDATE suppliers SET name=?,phone=?,address=? WHERE id=?",
+                  (self.s_name.get(), self.s_phone.get(), self.s_address.get(), sid))
+        conn.commit(); conn.close()
+        messagebox.showinfo("Success", "Supplier Updated!"); self.load_suppliers()
+
+    def delete_supplier(self):
+        sel = self.supplier_tree.selection()
+        if not sel: return
+        if messagebox.askyesno("Confirm", "Delete this supplier?"):
+            sid = self.supplier_tree.item(sel[0])['values'][0]
+            conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+            c.execute("DELETE FROM suppliers WHERE id=?", (sid,))
+            conn.commit(); conn.close()
+            self.load_suppliers(); self.clear_supplier_form()
+
+    def clear_supplier_form(self):
+        for e in [self.s_name, self.s_phone, self.s_address]: e.delete(0, tk.END)
+
+    def _refresh_supplier_combobox(self):
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        c.execute("SELECT id,name FROM suppliers ORDER BY name")
+        rows = c.fetchall(); conn.close()
+        self.suppliers_dict = {r[1]: r[0] for r in rows}
+        if hasattr(self, 'pur_supplier_cb'):
+            self.pur_supplier_cb['values'] = list(self.suppliers_dict.keys())
+
+    # ======================== PURCHASE TAB ========================
+    def create_purchase_tab(self):
+        left = tk.Frame(self.purchase_tab, padx=15, pady=15, width=420)
+        left.pack(side=tk.LEFT, fill=tk.Y)
+        left.pack_propagate(False)
+
+        tk.Label(left, text="Purchase Order", font=("Arial", 15, "bold")).pack(pady=8)
+
+        sf = tk.Frame(left); sf.pack(fill=tk.X, pady=4)
+        tk.Label(sf, text="Supplier:").pack(side=tk.LEFT)
+        self.pur_supplier_var = tk.StringVar()
+        self.pur_supplier_cb  = ttk.Combobox(sf, textvariable=self.pur_supplier_var, width=24, state="readonly")
+        self.pur_supplier_cb.pack(side=tk.LEFT, padx=5)
+
+        tk.Label(left, text="Search Product:").pack(anchor="w")
+        self.pur_search = tk.Entry(left, width=38)
+        self.pur_search.pack(pady=3)
+        self.pur_search.bind("<KeyRelease>", self.pur_search_product)
+
+        cols = ("ID", "Name", "Buy Price", "Stock")
+        self.pur_search_tree = ttk.Treeview(left, columns=cols, show="headings", height=6)
+        for col, w in zip(cols, (40, 190, 80, 70)):
+            self.pur_search_tree.heading(col, text=col)
+            self.pur_search_tree.column(col, width=w)
+        self.pur_search_tree.pack(fill=tk.X, pady=4)
+        self.pur_search_tree.bind("<Double-1>", self.pur_add_to_cart)
+
+        tk.Label(left, text="Purchase Cart", font=("Arial", 11, "bold")).pack(anchor="w", pady=(8,2))
+        cols2 = ("ID", "Name", "Qty", "Buy Price", "Total")
+        self.pur_cart = ttk.Treeview(left, columns=cols2, show="headings", height=8)
+        for col, w in zip(cols2, (40, 170, 55, 80, 75)):
+            self.pur_cart.heading(col, text=col)
+            self.pur_cart.column(col, width=w)
+        self.pur_cart.pack(fill=tk.BOTH, expand=True)
+
+        br = tk.Frame(left); br.pack(pady=4)
+        tk.Button(br, text="Remove", command=self.pur_remove_item, bg="#f44336", fg="white").pack(side=tk.LEFT, padx=4)
+        tk.Button(br, text="Clear",  command=self.pur_clear_cart,  bg="#9E9E9E", fg="white").pack(side=tk.LEFT, padx=4)
+
+        right = tk.Frame(self.purchase_tab, padx=20)
+        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, pady=20)
+
+        tk.Label(right, text="Purchase Summary", font=("Arial", 14, "bold")).pack(pady=8)
+        self.pur_total_lbl = tk.Label(right, text="Total: 0.00 Tk", font=("Arial", 16, "bold"), fg="#1565C0")
+        self.pur_total_lbl.pack(pady=8)
+
+        gf = tk.Frame(right); gf.pack(pady=5)
+        tk.Label(gf, text="Paid Amount (Tk):").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        self.pur_paid_var = tk.StringVar(value="0")
+        tk.Entry(gf, textvariable=self.pur_paid_var, width=14).grid(row=0, column=1, padx=5)
+
+        self.pur_due_lbl = tk.Label(right, text="Due to Supplier: 0.00 Tk", font=("Arial", 12), fg="red")
+        self.pur_due_lbl.pack(pady=5)
+
+        tk.Button(right, text="Calculate", command=self.pur_calculate,
+                  bg="#607D8B", fg="white", width=22).pack(pady=5)
+        tk.Button(right, text="Complete Purchase", command=self.complete_purchase,
+                  bg="#1565C0", fg="white", font=("Arial", 12, "bold"), height=2).pack(pady=8, fill=tk.X)
+        tk.Button(right, text="Reset", command=self.pur_reset,
+                  bg="#FF5722", fg="white").pack(pady=3, fill=tk.X)
+
+        tk.Label(right, text="Recent Purchases", font=("Arial", 12, "bold")).pack(pady=(15,3))
+        cols3 = ("ID", "Date", "Supplier", "Total", "Paid", "Due")
+        self.pur_history = ttk.Treeview(right, columns=cols3, show="headings", height=10)
+        for col, w in zip(cols3, (50, 100, 160, 90, 90, 90)):
+            self.pur_history.heading(col, text=col)
+            self.pur_history.column(col, width=w)
+        self.pur_history.tag_configure("due", foreground="red")
+        self.pur_history.pack(fill=tk.BOTH, expand=True)
+
+        self._refresh_supplier_combobox()
+        self.pur_load_search()
+        self.pur_load_history()
+
+    def pur_search_product(self, event=None):
+        term = self.pur_search.get()
+        for i in self.pur_search_tree.get_children(): self.pur_search_tree.delete(i)
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        if term:
+            c.execute("SELECT id,name,buy_price,stock FROM products WHERE name LIKE ? LIMIT 20", (f"%{term}%",))
+        else:
+            c.execute("SELECT id,name,buy_price,stock FROM products LIMIT 30")
+        for row in c.fetchall():
+            self.pur_search_tree.insert("", "end", values=row)
+        conn.close()
+
+    def pur_load_search(self): self.pur_search_product()
+
+    def pur_add_to_cart(self, event=None):
+        sel = self.pur_search_tree.selection()
+        if not sel: return
+        v = self.pur_search_tree.item(sel[0])['values']
+        pid, name, buy_price, stock = v
+        buy_price = float(buy_price)
+        qty = simpledialog.askinteger("Quantity", f"Enter quantity for {name}:", minvalue=1)
+        if not qty: return
+        total = buy_price * qty
+        self.pur_cart.insert("", "end", values=(pid, name, qty, f"{buy_price:.2f}", f"{total:.2f}"))
+        self.pur_update_total()
+
+    def pur_remove_item(self):
+        sel = self.pur_cart.selection()
+        if sel: self.pur_cart.delete(sel[0]); self.pur_update_total()
+
+    def pur_clear_cart(self):
+        for i in self.pur_cart.get_children(): self.pur_cart.delete(i)
+        self.pur_update_total()
+
+    def pur_update_total(self):
+        total = sum(float(self.pur_cart.item(c)['values'][4]) for c in self.pur_cart.get_children())
+        self.pur_total_lbl.config(text=f"Total: {total:.2f} Tk")
+        self.pur_calculate()
+
+    def pur_calculate(self):
+        total = sum(float(self.pur_cart.item(c)['values'][4]) for c in self.pur_cart.get_children())
+        try: paid = float(self.pur_paid_var.get() or 0)
+        except: paid = 0
+        due = total - paid
+        self.pur_due_lbl.config(text=f"Due to Supplier: {due:.2f} Tk", fg="red" if due > 0 else "green")
+
+    def pur_reset(self):
+        self.pur_clear_cart()
+        self.pur_supplier_var.set("")
+        self.pur_paid_var.set("0")
+        self.pur_total_lbl.config(text="Total: 0.00 Tk")
+        self.pur_due_lbl.config(text="Due to Supplier: 0.00 Tk")
+
+    def complete_purchase(self):
+        if not self.pur_cart.get_children():
+            messagebox.showwarning("Warning", "Cart is empty!"); return
+        sup_name = self.pur_supplier_var.get()
+        if not sup_name:
+            messagebox.showwarning("Warning", "Select a supplier!"); return
+
+        total = sum(float(self.pur_cart.item(c)['values'][4]) for c in self.pur_cart.get_children())
+        try: paid = float(self.pur_paid_var.get() or 0)
+        except: paid = 0
+        due = total - paid
+
+        if not messagebox.askyesno("Confirm", f"Total: {total:.2f} Tk\nPaid: {paid:.2f} Tk\nDue: {due:.2f} Tk\n\nComplete Purchase?"): return
+
+        sup_id = self.suppliers_dict.get(sup_name)
+        today  = datetime.date.today().isoformat()
+        items_parts = []
+        for child in self.pur_cart.get_children():
+            v = self.pur_cart.item(child)['values']
+            items_parts.append(f"{v[1]}||{v[2]}||{v[3]}")
+
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        c.execute("INSERT INTO purchases (date,supplier_id,supplier_name,total,paid,due,items) VALUES(?,?,?,?,?,?,?)",
+                  (today, sup_id, sup_name, total, paid, due, "|".join(items_parts)))
+
+        # Update stock & buy price for each item
+        for child in self.pur_cart.get_children():
+            v = self.pur_cart.item(child)['values']
+            pid = v[0]; qty = int(v[2]); buy_p = float(v[3])
+            c.execute("UPDATE products SET stock=stock+?, buy_price=? WHERE id=?", (qty, buy_p, pid))
+            c.execute("INSERT INTO stock_log (date,product_id,product_name,type,qty,note) VALUES(?,?,?,?,?,?)",
+                      (today, pid, v[1], "IN", qty, f"Purchase from {sup_name}"))
+
+        if sup_id and due > 0:
+            c.execute("UPDATE suppliers SET due=due+? WHERE id=?", (due, sup_id))
+
+        conn.commit(); conn.close()
+        messagebox.showinfo("Success", f"Purchase recorded! Stock updated.")
+        self.pur_reset()
+        self.load_products(); self.load_stock_log(); self.load_stock_products()
+        self.load_suppliers(); self.pur_load_history()
+        self.refresh_dashboard()
+
+    def pur_load_history(self):
+        for i in self.pur_history.get_children(): self.pur_history.delete(i)
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        c.execute("SELECT id,date,supplier_name,total,paid,due FROM purchases ORDER BY id DESC LIMIT 50")
+        for row in c.fetchall():
+            tag = ("due",) if row[5] > 0 else ()
+            self.pur_history.insert("", "end",
+                values=(f"#{row[0]}", row[1], row[2], f"{row[3]:.2f}", f"{row[4]:.2f}", f"{row[5]:.2f}"), tags=tag)
+        conn.close()
+
+    # ======================== WARRANTY TAB ========================
+    def create_warranty_tab(self):
+        top = tk.Frame(self.warranty_tab, padx=15, pady=12)
+        top.pack(fill=tk.X)
+
+        tk.Label(top, text="Warranty Management", font=("Arial", 15, "bold")).grid(row=0, column=0, columnspan=8, pady=8)
+
+        fields = [("Customer Name:", "war_cust"), ("Phone:", "war_phone"),
+                  ("Product:", "war_product"), ("Serial No:", "war_serial")]
+        for i, (lbl, attr) in enumerate(fields):
+            tk.Label(top, text=lbl).grid(row=1, column=i*2, sticky="w", padx=5)
+            e = tk.Entry(top, width=18)
+            e.grid(row=1, column=i*2+1, padx=5, pady=4)
+            setattr(self, attr, e)
+
+        f2 = tk.Frame(self.warranty_tab, padx=15); f2.pack(fill=tk.X)
+        tk.Label(f2, text="Warranty (Months):").grid(row=0, column=0, sticky="w", padx=5)
+        self.war_months = ttk.Combobox(f2, values=["3","6","12","18","24","36"], width=8, state="readonly")
+        self.war_months.set("12"); self.war_months.grid(row=0, column=1, padx=5)
+
+        tk.Label(f2, text="Sale Date:").grid(row=0, column=2, sticky="w", padx=5)
+        self.war_date = tk.Entry(f2, width=14)
+        self.war_date.insert(0, datetime.date.today().isoformat())
+        self.war_date.grid(row=0, column=3, padx=5)
+
+        tk.Label(f2, text="Note:").grid(row=0, column=4, sticky="w", padx=5)
+        self.war_note = tk.Entry(f2, width=25)
+        self.war_note.grid(row=0, column=5, padx=5)
+
+        bf = tk.Frame(self.warranty_tab, padx=15); bf.pack(pady=8)
+        tk.Button(bf, text="Add Warranty", command=self.add_warranty,
+                  bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), padx=15).pack(side=tk.LEFT, padx=5)
+        tk.Button(bf, text="Check Expiry (Today)", command=self.check_warranty_expiry,
+                  bg="#FF9800", fg="white", padx=10).pack(side=tk.LEFT, padx=5)
+        tk.Button(bf, text="Delete Selected", command=self.delete_warranty,
+                  bg="#f44336", fg="white", padx=10).pack(side=tk.LEFT, padx=5)
+
+        search_f = tk.Frame(self.warranty_tab, padx=15); search_f.pack(fill=tk.X, pady=3)
+        tk.Label(search_f, text="Search:").pack(side=tk.LEFT)
+        self.war_search = tk.Entry(search_f, width=30)
+        self.war_search.pack(side=tk.LEFT, padx=5)
+        self.war_search.bind("<KeyRelease>", self.search_warranty)
+        tk.Button(search_f, text="All", command=self.load_warranties,
+                  bg="#607D8B", fg="white", padx=8).pack(side=tk.LEFT, padx=5)
+
+        cols = ("ID", "Sale Date", "Customer", "Phone", "Product", "Serial", "Months", "Expiry", "Status")
+        self.warranty_tree = ttk.Treeview(self.warranty_tab, columns=cols, show="headings", height=18)
+        widths = (40, 100, 150, 110, 180, 120, 70, 100, 80)
+        for col, w in zip(cols, widths):
+            self.warranty_tree.heading(col, text=col)
+            self.warranty_tree.column(col, width=w)
+        self.warranty_tree.tag_configure("expired", foreground="red")
+        self.warranty_tree.tag_configure("expiring", foreground="#FF8F00")
+        self.warranty_tree.tag_configure("valid",   foreground="#2E7D32")
+
+        sb = ttk.Scrollbar(self.warranty_tab, orient="vertical", command=self.warranty_tree.yview)
+        self.warranty_tree.configure(yscrollcommand=sb.set)
+        self.warranty_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(15,0))
+        sb.pack(side=tk.LEFT, fill=tk.Y, padx=(0,15))
+        self.load_warranties()
+
+    def add_warranty(self):
+        cust = self.war_cust.get().strip()
+        prod = self.war_product.get().strip()
+        if not cust or not prod:
+            messagebox.showerror("Error", "Customer and Product required!"); return
+        try:
+            months = int(self.war_months.get())
+            sale_date = self.war_date.get().strip()
+            sd = datetime.date.fromisoformat(sale_date)
+            expiry = (sd.replace(month=sd.month + months) if sd.month + months <= 12
+                      else sd.replace(year=sd.year + (sd.month+months-1)//12,
+                                      month=(sd.month+months-1)%12+1)).isoformat()
+        except Exception as e:
+            messagebox.showerror("Error", f"Date error: {e}"); return
+
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        c.execute("INSERT INTO warranties (sale_id,sale_date,customer_name,customer_phone,product_name,serial_no,warranty_months,expiry_date,note) VALUES(?,?,?,?,?,?,?,?,?)",
+                  (0, sale_date, cust, self.war_phone.get(), prod,
+                   self.war_serial.get(), months, expiry, self.war_note.get()))
+        conn.commit(); conn.close()
+        messagebox.showinfo("Success", f"Warranty added! Expires: {expiry}")
+        for e in [self.war_cust, self.war_phone, self.war_product, self.war_serial, self.war_note]:
+            e.delete(0, tk.END)
+        self.load_warranties()
+
+    def load_warranties(self):
+        for i in self.warranty_tree.get_children(): self.warranty_tree.delete(i)
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        c.execute("SELECT id,sale_date,customer_name,customer_phone,product_name,serial_no,warranty_months,expiry_date FROM warranties ORDER BY expiry_date")
+        today = datetime.date.today()
+        for row in c.fetchall():
+            try:
+                exp = datetime.date.fromisoformat(row[7])
+                days_left = (exp - today).days
+                if days_left < 0: status = "Expired"; tag = "expired"
+                elif days_left <= 30: status = f"{days_left}d left"; tag = "expiring"
+                else: status = "Valid"; tag = "valid"
+            except: status = "?"; tag = ""
+            self.warranty_tree.insert("", "end", values=(*row, status), tags=(tag,))
+        conn.close()
+
+    def search_warranty(self, event=None):
+        term = self.war_search.get().lower()
+        for i in self.warranty_tree.get_children(): self.warranty_tree.delete(i)
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        c.execute("SELECT id,sale_date,customer_name,customer_phone,product_name,serial_no,warranty_months,expiry_date FROM warranties WHERE customer_name LIKE ? OR product_name LIKE ? OR serial_no LIKE ?",
+                  (f"%{term}%", f"%{term}%", f"%{term}%"))
+        today = datetime.date.today()
+        for row in c.fetchall():
+            try:
+                exp = datetime.date.fromisoformat(row[7])
+                days_left = (exp - today).days
+                if days_left < 0: status = "Expired"; tag = "expired"
+                elif days_left <= 30: status = f"{days_left}d left"; tag = "expiring"
+                else: status = "Valid"; tag = "valid"
+            except: status = "?"; tag = ""
+            self.warranty_tree.insert("", "end", values=(*row, status), tags=(tag,))
+        conn.close()
+
+    def check_warranty_expiry(self):
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        today = datetime.date.today().isoformat()
+        in30  = (datetime.date.today() + datetime.timedelta(days=30)).isoformat()
+        c.execute("SELECT customer_name, product_name, expiry_date FROM warranties WHERE expiry_date <= ?", (in30,))
+        rows = c.fetchall(); conn.close()
+        if not rows:
+            messagebox.showinfo("All Good!", "No warranties expiring in 30 days."); return
+        msg = "Expiring within 30 days:\n\n"
+        for r in rows:
+            msg += f"• {r[0]} — {r[1]} (Expires: {r[2]})\n"
+        messagebox.showwarning("Warranty Alert!", msg)
+
+    def delete_warranty(self):
+        sel = self.warranty_tree.selection()
+        if not sel: return
+        if messagebox.askyesno("Confirm", "Delete this warranty record?"):
+            wid = self.warranty_tree.item(sel[0])['values'][0]
+            conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+            c.execute("DELETE FROM warranties WHERE id=?", (wid,))
+            conn.commit(); conn.close()
+            self.load_warranties()
+
+    # ======================== RETURN / EXCHANGE TAB ========================
+    def create_return_tab(self):
+        top = tk.Frame(self.return_tab, padx=15, pady=12)
+        top.pack(fill=tk.X)
+
+        tk.Label(top, text="Product Return / Exchange", font=("Arial", 15, "bold")).pack(pady=8)
+
+        form = tk.Frame(self.return_tab, padx=20); form.pack(fill=tk.X)
+
+        # Row 1
+        r1 = tk.Frame(form); r1.pack(fill=tk.X, pady=3)
+        tk.Label(r1, text="Type:", width=14, anchor="w").pack(side=tk.LEFT)
+        self.ret_type = ttk.Combobox(r1, values=["Return (Refund)", "Exchange"], width=18, state="readonly")
+        self.ret_type.set("Return (Refund)"); self.ret_type.pack(side=tk.LEFT, padx=5)
+        tk.Label(r1, text="Date:", width=8, anchor="w").pack(side=tk.LEFT)
+        self.ret_date = tk.Entry(r1, width=14)
+        self.ret_date.insert(0, datetime.date.today().isoformat())
+        self.ret_date.pack(side=tk.LEFT, padx=5)
+
+        # Row 2
+        r2 = tk.Frame(form); r2.pack(fill=tk.X, pady=3)
+        tk.Label(r2, text="Customer Name:", width=14, anchor="w").pack(side=tk.LEFT)
+        self.ret_customer = tk.Entry(r2, width=22); self.ret_customer.pack(side=tk.LEFT, padx=5)
+        tk.Label(r2, text="Product:", width=8, anchor="w").pack(side=tk.LEFT)
+        self.ret_product = tk.Entry(r2, width=22); self.ret_product.pack(side=tk.LEFT, padx=5)
+
+        # Row 3
+        r3 = tk.Frame(form); r3.pack(fill=tk.X, pady=3)
+        tk.Label(r3, text="Qty:", width=14, anchor="w").pack(side=tk.LEFT)
+        self.ret_qty = tk.Entry(r3, width=8); self.ret_qty.insert(0, "1"); self.ret_qty.pack(side=tk.LEFT, padx=5)
+        tk.Label(r3, text="Unit Price:", width=10, anchor="w").pack(side=tk.LEFT)
+        self.ret_price = tk.Entry(r3, width=12); self.ret_price.pack(side=tk.LEFT, padx=5)
+        tk.Label(r3, text="Refund Amt:", width=10, anchor="w").pack(side=tk.LEFT)
+        self.ret_refund = tk.Entry(r3, width=12); self.ret_refund.pack(side=tk.LEFT, padx=5)
+
+        # Row 4
+        r4 = tk.Frame(form); r4.pack(fill=tk.X, pady=3)
+        tk.Label(r4, text="Reason:", width=14, anchor="w").pack(side=tk.LEFT)
+        self.ret_reason = ttk.Combobox(r4, values=["Defective","Wrong Item","Customer Changed Mind","Warranty Claim","Other"], width=20, state="normal")
+        self.ret_reason.set("Defective"); self.ret_reason.pack(side=tk.LEFT, padx=5)
+        tk.Label(r4, text="Note:", width=8, anchor="w").pack(side=tk.LEFT)
+        self.ret_note = tk.Entry(r4, width=30); self.ret_note.pack(side=tk.LEFT, padx=5)
+
+        bf = tk.Frame(self.return_tab, padx=20); bf.pack(pady=8)
+        tk.Button(bf, text="Record Return/Exchange", command=self.add_return,
+                  bg="#E65100", fg="white", font=("Arial", 11, "bold"), padx=15).pack(side=tk.LEFT, padx=5)
+        tk.Button(bf, text="Clear Form", command=self.clear_return_form,
+                  bg="#9E9E9E", fg="white", padx=10).pack(side=tk.LEFT, padx=5)
+
+        tk.Label(self.return_tab, text="Return / Exchange History", font=("Arial", 12, "bold")).pack(pady=(10,3))
+
+        cols = ("ID", "Date", "Type", "Customer", "Product", "Qty", "Price", "Refund", "Reason")
+        self.return_tree = ttk.Treeview(self.return_tab, columns=cols, show="headings", height=14)
+        widths = (40, 100, 120, 150, 180, 50, 80, 80, 130)
+        for col, w in zip(cols, widths):
+            self.return_tree.heading(col, text=col)
+            self.return_tree.column(col, width=w)
+        self.return_tree.tag_configure("return",   foreground="#B71C1C")
+        self.return_tree.tag_configure("exchange", foreground="#1565C0")
+
+        sb = ttk.Scrollbar(self.return_tab, orient="vertical", command=self.return_tree.yview)
+        self.return_tree.configure(yscrollcommand=sb.set)
+        self.return_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(15,0))
+        sb.pack(side=tk.LEFT, fill=tk.Y, padx=(0,15))
+        self.load_returns()
+
+    def add_return(self):
+        cust = self.ret_customer.get().strip()
+        prod = self.ret_product.get().strip()
+        if not cust or not prod:
+            messagebox.showerror("Error", "Customer and Product required!"); return
+        try:
+            qty    = int(self.ret_qty.get() or 1)
+            price  = float(self.ret_price.get() or 0)
+            refund = float(self.ret_refund.get() or 0)
+        except:
+            messagebox.showerror("Error", "Invalid qty/price!"); return
+
+        rtype = self.ret_type.get()
+        conn  = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        c.execute("INSERT INTO returns (date,type,customer_name,product_name,qty,price,refund,reason,note) VALUES(?,?,?,?,?,?,?,?,?)",
+                  (self.ret_date.get(), rtype, cust, prod, qty, price, refund,
+                   self.ret_reason.get(), self.ret_note.get()))
+
+        # If return, add stock back
+        if "Return" in rtype:
+            c.execute("UPDATE products SET stock=stock+? WHERE name LIKE ?", (qty, f"%{prod}%"))
+            today = datetime.date.today().isoformat()
+            c.execute("INSERT INTO stock_log (date,product_id,product_name,type,qty,note) VALUES(?,?,?,?,?,?)",
+                      (today, 0, prod, "IN", qty, f"Return from {cust}"))
+
+        conn.commit(); conn.close()
+        messagebox.showinfo("Success", f"{rtype} recorded! Refund: {refund:.2f} Tk")
+        self.clear_return_form()
+        self.load_returns()
+        self.load_products()
+
+    def clear_return_form(self):
+        for e in [self.ret_customer, self.ret_product, self.ret_note]:
+            e.delete(0, tk.END)
+        self.ret_qty.delete(0, tk.END); self.ret_qty.insert(0, "1")
+        self.ret_price.delete(0, tk.END)
+        self.ret_refund.delete(0, tk.END)
+
+    def load_returns(self):
+        for i in self.return_tree.get_children(): self.return_tree.delete(i)
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        c.execute("SELECT id,date,type,customer_name,product_name,qty,price,refund,reason FROM returns ORDER BY id DESC LIMIT 100")
+        for row in c.fetchall():
+            tag = ("return",) if "Return" in row[2] else ("exchange",)
+            self.return_tree.insert("", "end", values=row, tags=tag)
+        conn.close()
+
+    # ======================== USER MANAGEMENT TAB ========================
+    def create_user_tab(self):
+        left = tk.Frame(self.user_tab, padx=20, pady=20)
+        left.pack(side=tk.LEFT, fill=tk.Y)
+
+        tk.Label(left, text="User Management", font=("Arial", 15, "bold")).pack(pady=10)
+        tk.Label(left, text="(Admin only)", font=("Arial", 9), fg="gray").pack()
+
+        for lbl, attr, show in [("Username:", "u_name", ""), ("Password:", "u_pass", "*")]:
+            tk.Label(left, text=lbl, anchor="w").pack(fill=tk.X, pady=(8,0))
+            e = tk.Entry(left, width=25, show=show)
+            e.pack(pady=3)
+            setattr(self, attr, e)
+
+        tk.Label(left, text="Role:", anchor="w").pack(fill=tk.X, pady=(8,0))
+        self.u_role = ttk.Combobox(left, values=["admin", "staff"], width=23, state="readonly")
+        self.u_role.set("staff"); self.u_role.pack(pady=3)
+
+        bf = tk.Frame(left); bf.pack(pady=15)
+        tk.Button(bf, text="Add User",   command=self.add_user,    bg="#4CAF50", fg="white", width=12).grid(row=0, column=0, padx=4)
+        tk.Button(bf, text="Delete",     command=self.delete_user, bg="#f44336", fg="white", width=12).grid(row=0, column=1, padx=4)
+
+        tk.Label(left, text="Change Password", font=("Arial", 11, "bold")).pack(pady=(20,5))
+        tk.Label(left, text="New Password:", anchor="w").pack(fill=tk.X)
+        self.u_newpass = tk.Entry(left, width=25, show="*"); self.u_newpass.pack(pady=3)
+        tk.Button(left, text="Update Password", command=self.change_password,
+                  bg="#FF9800", fg="white", width=20).pack(pady=8)
+
+        right = tk.Frame(self.user_tab)
+        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+        tk.Label(right, text="User List", font=("Arial", 13, "bold")).pack()
+
+        cols = ("ID", "Username", "Role")
+        self.user_tree = ttk.Treeview(right, columns=cols, show="headings", height=20)
+        for col, w in zip(cols, (60, 200, 150)):
+            self.user_tree.heading(col, text=col)
+            self.user_tree.column(col, width=w)
+        self.user_tree.tag_configure("admin", foreground="#1565C0")
+        self.user_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.load_users()
+
+    def add_user(self):
+        uname = self.u_name.get().strip()
+        passw = self.u_pass.get().strip()
+        role  = self.u_role.get()
+        if not uname or not passw:
+            messagebox.showerror("Error", "Username and password required!"); return
+        try:
+            conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+            c.execute("INSERT INTO users (username,password,role) VALUES(?,?,?)", (uname, passw, role))
+            conn.commit(); conn.close()
+            messagebox.showinfo("Success", f"User '{uname}' created!")
+            self.u_name.delete(0, tk.END); self.u_pass.delete(0, tk.END)
+            self.load_users()
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Error", "Username already exists!")
+
+    def delete_user(self):
+        sel = self.user_tree.selection()
+        if not sel: return
+        uid  = self.user_tree.item(sel[0])['values'][0]
+        uname = self.user_tree.item(sel[0])['values'][1]
+        if uname == "admin":
+            messagebox.showerror("Error", "Cannot delete default admin!"); return
+        if uname == self.logged_user:
+            messagebox.showerror("Error", "Cannot delete yourself!"); return
+        if messagebox.askyesno("Confirm", f"Delete user '{uname}'?"):
+            conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+            c.execute("DELETE FROM users WHERE id=?", (uid,))
+            conn.commit(); conn.close()
+            self.load_users()
+
+    def change_password(self):
+        sel = self.user_tree.selection()
+        if not sel: messagebox.showwarning("Warning", "Select a user!"); return
+        uid   = self.user_tree.item(sel[0])['values'][0]
+        uname = self.user_tree.item(sel[0])['values'][1]
+        newp  = self.u_newpass.get().strip()
+        if not newp or len(newp) < 4:
+            messagebox.showerror("Error", "Password must be at least 4 characters!"); return
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        c.execute("UPDATE users SET password=? WHERE id=?", (newp, uid))
+        conn.commit(); conn.close()
+        messagebox.showinfo("Success", f"Password updated for '{uname}'!")
+        self.u_newpass.delete(0, tk.END)
+
+    def load_users(self):
+        for i in self.user_tree.get_children(): self.user_tree.delete(i)
+        conn = sqlite3.connect('shop_erp.db'); c = conn.cursor()
+        c.execute("SELECT id,username,role FROM users ORDER BY id")
+        for row in c.fetchall():
+            tag = ("admin",) if row[2] == "admin" else ()
+            self.user_tree.insert("", "end", values=row, tags=tag)
+        conn.close()
+
+# ====================== LOGIN WINDOW ======================
+class LoginWindow:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Shop ERP - Login")
+        self.root.geometry("400x480")
+        self.root.resizable(False, False)
+        self.root.configure(bg="#1a237e")
+        self.success = False
+
+        # Center window
+        self.root.eval('tk::PlaceWindow . center')
+
+        tk.Label(root, text="SHOP MANAGEMENT ERP", font=("Arial", 16, "bold"),
+                 bg="#1a237e", fg="white").pack(pady=(40, 5))
+        tk.Label(root, text="Md. Hasibul Electronics", font=("Arial", 11),
+                 bg="#1a237e", fg="#90CAF9").pack(pady=(0, 30))
+
+        card = tk.Frame(root, bg="white", padx=30, pady=30)
+        card.pack(padx=40, fill=tk.X)
+
+        tk.Label(card, text="Username", font=("Arial", 10, "bold"), bg="white", anchor="w").pack(fill=tk.X)
+        self.username = tk.Entry(card, font=("Arial", 12), width=25)
+        self.username.pack(pady=(3, 15), ipady=6, fill=tk.X)
+        self.username.insert(0, "admin")
+
+        tk.Label(card, text="Password", font=("Arial", 10, "bold"), bg="white", anchor="w").pack(fill=tk.X)
+        self.password = tk.Entry(card, font=("Arial", 12), show="*", width=25)
+        self.password.pack(pady=(3, 20), ipady=6, fill=tk.X)
+        self.password.bind("<Return>", lambda e: self.login())
+
+        tk.Button(card, text="LOGIN", command=self.login, bg="#1a237e", fg="white",
+                  font=("Arial", 12, "bold"), pady=8, relief="flat").pack(fill=tk.X)
+
+        self.msg = tk.Label(root, text="", font=("Arial", 10), bg="#1a237e", fg="#FF8A80")
+        self.msg.pack(pady=10)
+
+        tk.Label(root, text="Default: admin / admin123", font=("Arial", 9),
+                 bg="#1a237e", fg="#7986CB").pack(pady=5)
+
+        self.username.focus()
+
+    def login(self):
+        uname = self.username.get().strip()
+        passw = self.password.get().strip()
+        if not uname or not passw:
+            self.msg.config(text="Username and password required!")
+            return
+        conn = sqlite3.connect('shop_erp.db')
+        c = conn.cursor()
+        c.execute("SELECT id, role FROM users WHERE username=? AND password=?", (uname, passw))
+        user = c.fetchone()
+        conn.close()
+        if user:
+            self.success = True
+            self.logged_user = uname
+            self.logged_role = user[1]
+            self.root.destroy()
+        else:
+            self.msg.config(text="Wrong username or password!")
+            self.password.delete(0, tk.END)
+
+
 # ====================== RUN ======================
 if __name__ == "__main__":
+    init_db()
+
+    # Login first
+    login_root = tk.Tk()
+    login_app  = LoginWindow(login_root)
+    login_root.mainloop()
+
+    if not login_app.success:
+        exit()
+
+    # Launch main app
     root = tk.Tk()
-    app = ShopERP(root)
+    app  = ShopERP(root, login_app.logged_user, login_app.logged_role)
     root.mainloop()
